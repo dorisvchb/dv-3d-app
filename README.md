@@ -62,10 +62,11 @@ node --version
 npm --version
 npx --version
 ```
-
+![Verificar instalacion de Node](./assets/docs/images/verificar-instalacion-node.png)
 **2. Instala Visual Studio Code**
 
 Ve a [code.visualstudio.com](https://code.visualstudio.com) y descarga e instala la versión correspondiente a tu sistema operativo.
+![Visual Studio Code instalado](./assets/docs/images/instalado-vscode.png)
 
 **3. Instala la app Expo Go en tu dispositivo Android o iOS**
 
@@ -74,6 +75,7 @@ Necesaria para probar la aplicación directamente en tu teléfono.
 1. Abre la App Store (iPhone) o Google Play (Android)
 2. Busca **"Expo Go"**
 3. Instálala y ábrela
+![Expo Go instalado](./assets/docs/images/expoGo-instalado.png)
 
 ### Fase 2. Crear el proyecto
 
@@ -92,6 +94,7 @@ npx create-expo-app@latest --template blank dv-3d-app
 ```
 
 `dv-3d-app` es el nombre del proyecto que vas a crear. A continuación, elige la versión del SDK de Expo que sea compatible con Expo Go. Espera a que se descarguen las librerías necesarias para la creación del proyecto; esta tarea se realiza mediante el manejador de paquetes de Node (npm).
+![Comando para crear app Expo](./assets/docs/images/crear-proyecto-expo.png)
 
 **6. Ejecuta la aplicación**
 
@@ -132,6 +135,7 @@ d) **Importante:** existe la opción de conexión por **túnel** o **LAN** (por 
 3. Escanea el código QR que aparece en la terminal
 
 En pocos segundos verás tu app corriendo en tu teléfono. Mostrará la pantalla de bienvenida de Expo.
+![App funcionando](./assets/docs/images/appFuncionando.png)
 
 **8. Para detener el servidor de desarrollo**, presiona `Ctrl + C` en la línea de comandos.
 

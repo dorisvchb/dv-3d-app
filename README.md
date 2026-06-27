@@ -63,6 +63,7 @@ npm --version
 npx --version
 ```
 ![Verificar instalacion de Node](./assets/docs/images/verificar-instalacion-node.png)
+
 **2. Instala Visual Studio Code**
 
 Ve a [code.visualstudio.com](https://code.visualstudio.com) y descarga e instala la versión correspondiente a tu sistema operativo.
@@ -75,6 +76,7 @@ Necesaria para probar la aplicación directamente en tu teléfono.
 1. Abre la App Store (iPhone) o Google Play (Android)
 2. Busca **"Expo Go"**
 3. Instálala y ábrela
+   
 ![Expo Go instalado](./assets/docs/images/expoGo-instalado.png)
 
 ### Fase 2. Crear el proyecto

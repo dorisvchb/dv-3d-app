@@ -151,8 +151,11 @@ d) **Importante:** existe la opción de conexión por **túnel** o **LAN** (por 
 2. Toca **"Scan QR code"**
 3. Escanea el código QR que aparece en la terminal
 
-En pocos segundos verás tu app corriendo en tu teléfono. Con la autenticación ya implementada, verás la pantalla de **Login**.
+En pocos segundos verás tu app corriendo en tu teléfono.
 ![App funcionando](./assets/docs/images/appFuncionando.png)
+
+Con la autenticación ya implementada, verás la pantalla de **Login** como parte de las nuevas funcionalidades implementadas.
+![Pantalla de login](./assets/docs/images/pantallaLogin.png)
 
 **9. Para detener el servidor de desarrollo**, presiona `Ctrl + C` en la línea de comandos.
 

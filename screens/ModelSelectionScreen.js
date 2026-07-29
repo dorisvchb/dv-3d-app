@@ -4,7 +4,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { COLORS } from '../theme';
 
-export default function ModelSelectionScreen() {
+export default function ModelSelectionScreen({ navigation }) {
   const handleLogout = () => {
     signOut(auth).catch(() =>
       Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.')
@@ -16,6 +16,14 @@ export default function ModelSelectionScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>Pantalla principal</Text>
+
+      {/* Botón temporal para probar el visor 3D mientras no existe el catálogo (Parte 5) */}
+      <TouchableOpacity
+        style={styles.viewerButton}
+        onPress={() => navigation.navigate('ModelViewer')}
+      >
+        <Text style={styles.viewerButtonText}>Ver modelo de prueba</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>Cerrar sesión</Text>
@@ -35,6 +43,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.secondary,
+  },
+  viewerButton: {
+    marginTop: 24,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  viewerButtonText: {
+    color: COLORS.secondary,
+    fontWeight: 'bold',
+    fontSize: 15,
   },
   logoutButton: {
     marginTop: 24,

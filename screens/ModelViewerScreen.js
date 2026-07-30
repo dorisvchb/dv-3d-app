@@ -192,7 +192,7 @@ function Model({ gltf, texture, groupRef, rotationY, rotationX, scale }) {
   return <primitive ref={groupRef} object={gltf.scene} />;
 }
 
-export default function ModelViewerScreen({ route }) {
+export default function ModelViewerScreen({ route, navigation }) {
   const groupRef = useRef(null);
   const viewShotRef = useRef(null);
   const { user } = useAuth();
@@ -204,9 +204,10 @@ export default function ModelViewerScreen({ route }) {
   const scale = useSharedValue(1);
   const startScale = useSharedValue(1);
 
-  // Solo se puede "guardar en el catálogo" un modelo elegido por el
-  // usuario (no el modelo de prueba empaquetado con la app)
-  const isUserModel = Boolean(route?.params?.modelUri);
+  // Solo se puede "guardar en el catálogo" un modelo recién elegido por
+  // el usuario desde su teléfono — no el modelo de prueba, y no uno que
+  // ya viene del catálogo (ya está guardado)
+  const isUserModel = Boolean(route?.params?.modelUri) && !route?.params?.fromCatalog;
   const fileName = route?.params?.fileName || 'modelo';
 
   // Si se navega con parámetros (ej. desde el selector de archivos o, más
@@ -255,7 +256,9 @@ export default function ModelViewerScreen({ route }) {
         ownerId: user.uid,
       });
 
-      Alert.alert('Guardado', 'El modelo se agregó a tu catálogo correctamente.');
+      Alert.alert('Guardado', 'El modelo se agregó a tu catálogo correctamente.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
     } catch (e) {
       console.error('[ModelViewer] Error guardando en el catálogo:', e);
       Alert.alert('Error', 'No se pudo guardar el modelo. Intenta de nuevo.');

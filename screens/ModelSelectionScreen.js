@@ -1,16 +1,48 @@
 // screens/ModelSelectionScreen.js
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  FlatList,
+  Image,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
-import { createModel, getAllModels } from '../services/models';
+import { getAllModels } from '../services/models';
 import { COLORS } from '../theme';
 
 export default function ModelSelectionScreen({ navigation }) {
   const { user } = useAuth();
-  const [testingFirestore, setTestingFirestore] = useState(false);
+  const [models, setModels] = useState([]);
+  const [loadingModels, setLoadingModels] = useState(true);
+
+  const fetchModels = useCallback(async () => {
+    setLoadingModels(true);
+    try {
+      const result = await getAllModels();
+      setModels(result);
+    } catch (e) {
+      console.error('[Catálogo] Error cargando modelos:', e);
+      Alert.alert('Error', 'No se pudo cargar el catálogo de modelos.');
+    } finally {
+      setLoadingModels(false);
+    }
+  }, []);
+
+  // Recarga el catálogo cada vez que la pantalla vuelve a tener foco
+  // (por ejemplo, al regresar del visor después de guardar un modelo nuevo)
+  useFocusEffect(
+    useCallback(() => {
+      fetchModels();
+    }, [fetchModels])
+  );
 
   const handleLogout = () => {
     signOut(auth).catch(() =>
@@ -18,41 +50,6 @@ export default function ModelSelectionScreen({ navigation }) {
     );
     // onAuthStateChanged detecta user = null y RootNavigator
     // regresa automáticamente a AuthStack (pantalla Login)
-  };
-
-  // Prueba temporal: crea un documento de modelo de prueba en Firestore
-  // (valida las Security Rules de creación) y luego lee todo el catálogo
-  // (valida la regla de lectura). Se elimina una vez confirmada la conexión.
-  const handleTestFirestore = async () => {
-    setTestingFirestore(true);
-    try {
-      const testId = await createModel({
-        name: 'Modelo de prueba',
-        description: 'Documento creado para verificar la conexión a Firestore',
-        category: 'prueba',
-        modelUrl: '',
-        modelType: 'glb',
-        thumbnailUrl: '',
-        initialScale: 1,
-        initialPosition: { x: 0, y: 0, z: 0 },
-        source: 'local',
-        externalId: null,
-        attribution: null,
-        ownerId: user.uid,
-      });
-
-      const allModels = await getAllModels();
-
-      Alert.alert(
-        'Firestore conectado correctamente',
-        `Documento de prueba creado (ID: ${testId}).\nTotal de modelos en la colección: ${allModels.length}.`
-      );
-    } catch (e) {
-      console.error('[Firestore test] Error:', e);
-      Alert.alert('Error de conexión', e.message || 'No se pudo conectar con Firestore.');
-    } finally {
-      setTestingFirestore(false);
-    }
   };
 
   // Abre el selector de archivos del sistema y navega al visor con el
@@ -82,104 +79,174 @@ export default function ModelSelectionScreen({ navigation }) {
     }
   };
 
+  const handleOpenCatalogModel = (item) => {
+    navigation.navigate('ModelViewer', {
+      modelUri: item.modelUrl,
+      fileName: item.name,
+      fromCatalog: true, // ya está guardado: no mostrar botón de "Guardar en mi catálogo"
+    });
+  };
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity style={styles.card} onPress={() => handleOpenCatalogModel(item)}>
+      {item.thumbnailUrl ? (
+        <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
+      ) : (
+        <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+          <Text style={styles.thumbnailPlaceholderText}>Sin miniatura</Text>
+        </View>
+      )}
+      <Text style={styles.cardTitle} numberOfLines={1}>
+        {item.name || 'Sin nombre'}
+      </Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Pantalla principal</Text>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Mi catálogo</Text>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={styles.logoutText}>Cerrar sesión</Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* Botón temporal para probar el visor 3D mientras no existe el catálogo (Parte 5) */}
-      <TouchableOpacity
-        style={styles.viewerButton}
-        onPress={() => navigation.navigate('ModelViewer')}
-      >
-        <Text style={styles.viewerButtonText}>Ver modelo de prueba</Text>
-      </TouchableOpacity>
+      {loadingModels ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={models}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          contentContainerStyle={styles.listContent}
+          columnWrapperStyle={styles.row}
+          renderItem={renderItem}
+          ListEmptyComponent={
+            <View style={styles.centered}>
+              <Text style={styles.emptyText}>
+                Aún no tienes modelos guardados. Selecciona uno desde tu teléfono para empezar.
+              </Text>
+            </View>
+          }
+        />
+      )}
 
-      {/* Selector de modelo .glb/.gltf propio desde el teléfono */}
-      <TouchableOpacity style={styles.pickButton} onPress={handlePickModel}>
-        <Text style={styles.pickButtonText}>Seleccionar modelo desde mi teléfono</Text>
-      </TouchableOpacity>
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.pickButton} onPress={handlePickModel}>
+          <Text style={styles.pickButtonText}>Seleccionar modelo desde mi teléfono</Text>
+        </TouchableOpacity>
 
-      {/* Botón temporal para verificar la conexión a Firestore */}
-      <TouchableOpacity
-        style={styles.firestoreButton}
-        onPress={handleTestFirestore}
-        disabled={testingFirestore}
-      >
-        {testingFirestore ? (
-          <ActivityIndicator color={COLORS.secondary} />
-        ) : (
-          <Text style={styles.firestoreButtonText}>Probar conexión Firestore</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Cerrar sesión</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.viewerButton}
+          onPress={() => navigation.navigate('ModelViewer')}
+        >
+          <Text style={styles.viewerButtonText}>Ver modelo de prueba</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
+
+const CARD_SIZE = '48%';
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.contrast,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.secondary,
+  },
+  logoutText: {
+    color: COLORS.accent,
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: COLORS.secondary,
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  row: {
+    justifyContent: 'space-between',
+  },
+  card: {
+    width: CARD_SIZE,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  thumbnail: {
+    width: '100%',
+    height: 140,
+    backgroundColor: COLORS.contrast,
+  },
+  thumbnailPlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  text: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  thumbnailPlaceholderText: {
     color: COLORS.secondary,
+    fontSize: 12,
+    opacity: 0.6,
   },
-  viewerButton: {
-    marginTop: 24,
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  viewerButtonText: {
+  cardTitle: {
+    padding: 10,
     color: COLORS.secondary,
-    fontWeight: 'bold',
-    fontSize: 15,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  footer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.primary,
+    backgroundColor: COLORS.contrast,
   },
   pickButton: {
-    marginTop: 24,
     backgroundColor: COLORS.primary,
     borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    minWidth: 220,
+    paddingVertical: 14,
     alignItems: 'center',
+    marginBottom: 10,
   },
   pickButtonText: {
     color: COLORS.secondary,
     fontWeight: 'bold',
     fontSize: 15,
-    textAlign: 'center',
   },
-  firestoreButton: {
-    marginTop: 24,
+  viewerButton: {
     backgroundColor: COLORS.secondary,
     borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    minWidth: 220,
+    paddingVertical: 14,
     alignItems: 'center',
   },
-  firestoreButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
-  logoutButton: {
-    marginTop: 24,
-    backgroundColor: COLORS.accent,
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  logoutText: {
+  viewerButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 15,

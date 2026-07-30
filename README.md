@@ -332,7 +332,7 @@ dv-3d-app/
 ├── screens/
 │   ├── LoginScreen.js           # Formulario de inicio de sesión
 │   ├── RegisterScreen.js        # Formulario de registro
-│   ├── ModelSelectionScreen.js  # Pantalla principal (placeholder, pendiente catálogo HU-03)
+│   ├── ModelSelectionScreen.js  # Catálogo de modelos 3D (HU-03): lista con miniaturas desde Firestore
 │   └── ModelViewerScreen.js     # Visor 3D: carga .glb, textura, rotación y zoom táctil
 └── assets/
     └── models/
@@ -395,7 +395,6 @@ La comprobación de `ownerId` en la app es solo para la experiencia de usuario (
 - [x] Configuración inicial del proyecto con Expo
 - [x] Implementación de registro de usuarios (HU-01)
 - [x] Implementación de inicio de sesión (HU-02)
-- [ ] Implementación del catálogo de modelos 3D (HU-03)
 - [x] Implementación de la visualización de modelos 3D con React Three Fiber (HU-04)
 - [x] Implementación de rotación táctil (HU-05)
 - [x] Implementación de zoom táctil (HU-06)

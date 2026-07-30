@@ -324,16 +324,18 @@ dv-3d-app/
 │   └── AuthContext.js           # Contexto global de sesión (onAuthStateChanged)
 ├── services/
 │   ├── models.js                # CRUD de la colección "models" en Firestore
-│   └── storage.js               # Subida de archivos (.glb + miniatura) a Cloudinary
+│   ├── storage.js               # Subida de archivos (.glb + miniatura) a Cloudinary
+│   └── polypizza.js             # Búsqueda de modelos en la API de Poly Pizza
 ├── navigation/
 │   ├── AuthStack.js             # Stack de pantallas sin sesión: Login, Register
-│   ├── AppStack.js              # Stack de pantallas con sesión: ModelSelection, ModelViewer
+│   ├── AppStack.js              # Stack con sesión: ModelSelection, ModelViewer, PolyPizzaSearch
 │   └── RootNavigator.js         # Decide qué stack mostrar según el estado de sesión
 ├── screens/
 │   ├── LoginScreen.js           # Formulario de inicio de sesión
 │   ├── RegisterScreen.js        # Formulario de registro
 │   ├── ModelSelectionScreen.js  # Catálogo de modelos 3D (HU-03): lista con miniaturas desde Firestore
-│   └── ModelViewerScreen.js     # Visor 3D: carga .glb, textura, rotación y zoom táctil
+│   ├── ModelViewerScreen.js     # Visor 3D: carga .glb, textura, rotación, zoom, editar/eliminar
+│   └── PolyPizzaSearchScreen.js # Buscador de modelos gratuitos de Poly Pizza
 └── assets/
     └── models/
         ├── aldeana_appExpo.glb  # Modelo de prueba
@@ -383,10 +385,20 @@ dv-3d-app/
 
 Al abrir un modelo desde el catálogo, si el usuario autenticado es el dueño (`ownerId` coincide con su UID), aparecen los botones **Editar** y **Eliminar**:
 
-- **Editar**: despliega un formulario inline (nombre, categoría, descripción) y guarda los cambios con `updateModel()`.
+- **Editar**: abre un formulario dentro de un `Modal` nativo (con `KeyboardAvoidingView` + `ScrollView`), separado por completo de la capa del visor 3D — evita cualquier conflicto de toque/gesto con el `Canvas` y permite hacer scroll con normalidad cuando el teclado tapa los campos. Guarda los cambios con `updateModel()`.
 - **Eliminar**: pide confirmación y elimina el documento con `deleteModel()`, regresando al catálogo.
 
 La comprobación de `ownerId` en la app es solo para la experiencia de usuario (ocultar botones que no aplican); la seguridad real la garantizan las Security Rules de Firestore, que rechazan cualquier intento de editar/eliminar un documento que no pertenezca al usuario autenticado, sin importar lo que haga la interfaz.
+
+### Integración con Poly Pizza (fuente externa de modelos)
+
+Además de subir modelos propios, la app permite buscar e importar modelos gratuitos de [Poly Pizza](https://poly.pizza) (licencias CC0/CC-BY):
+
+- `services/polypizza.js` consulta su API REST (`GET https://api.poly.pizza/v1/search/{query}`, autenticada con header `X-Auth-Token`) y normaliza la respuesta a los campos que usa el resto de la app.
+- `PolyPizzaSearchScreen` muestra los resultados en una cuadrícula con miniatura, nombre, autor y licencia.
+- Al guardar un modelo de Poly Pizza en el catálogo, **no se sube ningún archivo propio** — el modelo y la miniatura ya están alojados por Poly Pizza, así que solo se crea el documento en Firestore apuntando a esas URLs (`source: "polypizza"`, con `externalId` y `attribution` guardados para dar crédito al autor original).
+
+> Igual que con los modelos elegidos desde el teléfono, los modelos de Poly Pizza pueden no mostrar textura en el visor si la textura viene embebida en el `.glb` en un formato que `stripEmbeddedImages` no logra preservar — es la misma limitación conocida documentada en la sección del visor 3D.
 
 ## Estado actual del proyecto
 
@@ -403,7 +415,7 @@ La comprobación de `ownerId` en la app es solo para la experiencia de usuario (
 - [x] Guardado de modelos en Firestore + Cloudinary (crear: modelo + miniatura + metadatos)
 - [x] Catálogo de modelos 3D — listado con miniaturas (HU-03)
 - [x] Actualizar/eliminar modelos guardados (UPDATE/DELETE del CRUD)
-- [ ] Integración con Poly Pizza API
+- [x] Integración con Poly Pizza API
 - [ ] Estructura preparada para integración futura con Thingiverse (`.stl`)
 
 ---

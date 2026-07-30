@@ -379,6 +379,15 @@ dv-3d-app/
   2. `services/storage.js` sube el `.glb` original y esa miniatura a Cloudinary.
   3. `services/models.js` crea el documento correspondiente en Firestore con las URLs resultantes.
 
+### Editar y eliminar modelos (CRUD completo)
+
+Al abrir un modelo desde el catálogo, si el usuario autenticado es el dueño (`ownerId` coincide con su UID), aparecen los botones **Editar** y **Eliminar**:
+
+- **Editar**: despliega un formulario inline (nombre, categoría, descripción) y guarda los cambios con `updateModel()`.
+- **Eliminar**: pide confirmación y elimina el documento con `deleteModel()`, regresando al catálogo.
+
+La comprobación de `ownerId` en la app es solo para la experiencia de usuario (ocultar botones que no aplican); la seguridad real la garantizan las Security Rules de Firestore, que rechazan cualquier intento de editar/eliminar un documento que no pertenezca al usuario autenticado, sin importar lo que haga la interfaz.
+
 ## Estado actual del proyecto
 
 - [x] Definición del problema, objetivo y alcance del MVP
@@ -394,7 +403,7 @@ dv-3d-app/
 - [x] Selección de modelo `.glb` propio desde el teléfono (`expo-document-picker`)
 - [x] Guardado de modelos en Firestore + Cloudinary (crear: modelo + miniatura + metadatos)
 - [x] Catálogo de modelos 3D — listado con miniaturas (HU-03)
-- [ ] Actualizar/eliminar modelos guardados (UPDATE/DELETE del CRUD)
+- [x] Actualizar/eliminar modelos guardados (UPDATE/DELETE del CRUD)
 - [ ] Integración con Poly Pizza API
 - [ ] Estructura preparada para integración futura con Thingiverse (`.stl`)
 

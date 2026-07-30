@@ -84,6 +84,10 @@ export default function ModelSelectionScreen({ navigation }) {
       modelUri: item.modelUrl,
       fileName: item.name,
       fromCatalog: true, // ya está guardado: no mostrar botón de "Guardar en mi catálogo"
+      modelId: item.id,
+      ownerId: item.ownerId,
+      description: item.description,
+      category: item.category,
     });
   };
 

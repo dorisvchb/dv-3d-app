@@ -1,6 +1,14 @@
 // screens/ModelViewerScreen.js
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Alert } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  Text,
+  TouchableOpacity,
+  Alert,
+  TextInput,
+} from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useSharedValue } from 'react-native-reanimated';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -10,7 +18,7 @@ import { Asset } from 'expo-asset';
 import ViewShot from 'react-native-view-shot';
 import { useAuth } from '../context/AuthContext';
 import { uploadModelWithThumbnail } from '../services/storage';
-import { createModel } from '../services/models';
+import { createModel, updateModel, deleteModel } from '../services/models';
 import { COLORS } from '../theme';
 
 // El .glb trae texturas embebidas en base64 que GLTFLoader no puede
@@ -210,6 +218,18 @@ export default function ModelViewerScreen({ route, navigation }) {
   const isUserModel = Boolean(route?.params?.modelUri) && !route?.params?.fromCatalog;
   const fileName = route?.params?.fileName || 'modelo';
 
+  // Solo el dueño del modelo (comparando con el usuario autenticado) puede
+  // editar o eliminar — coincide con lo que ya exigen las Security Rules
+  const isOwner = route?.params?.fromCatalog && route?.params?.ownerId === user?.uid;
+  const modelId = route?.params?.modelId;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(fileName);
+  const [editDescription, setEditDescription] = useState(route?.params?.description || '');
+  const [editCategory, setEditCategory] = useState(route?.params?.category || '');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   // Si se navega con parámetros (ej. desde el selector de archivos o, más
   // adelante, desde el catálogo), se usa ese modelo. Si no, se muestra el
   // modelo de prueba empaquetado con la app.
@@ -265,6 +285,58 @@ export default function ModelViewerScreen({ route, navigation }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Actualiza nombre, descripción y categoría del modelo (solo el dueño,
+  // según las Security Rules de Firestore)
+  const handleUpdateModel = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Nombre requerido', 'El modelo debe tener un nombre.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await updateModel(modelId, {
+        name: editName.trim(),
+        description: editDescription.trim(),
+        category: editCategory.trim() || 'sin categoría',
+      });
+      setIsEditing(false);
+      Alert.alert('Actualizado', 'Los cambios se guardaron correctamente.');
+    } catch (e) {
+      console.error('[ModelViewer] Error actualizando el modelo:', e);
+      Alert.alert('Error', 'No se pudo actualizar el modelo.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // Elimina el modelo del catálogo (solo el dueño, según las Security
+  // Rules de Firestore) y regresa a la pantalla anterior
+  const handleDeleteModel = () => {
+    Alert.alert(
+      'Eliminar modelo',
+      '¿Seguro que quieres eliminar este modelo de tu catálogo? Esta acción no se puede deshacer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteModel(modelId);
+              navigation.goBack();
+            } catch (e) {
+              console.error('[ModelViewer] Error eliminando el modelo:', e);
+              Alert.alert('Error', 'No se pudo eliminar el modelo.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Límite de inclinación vertical: ±45° (en radianes), para permitir ver
@@ -359,6 +431,74 @@ export default function ModelViewerScreen({ route, navigation }) {
           )}
         </TouchableOpacity>
       )}
+
+      {isOwner && !isEditing && (
+        <View style={styles.ownerActions}>
+          <TouchableOpacity
+            style={[styles.ownerButton, styles.editButton]}
+            onPress={() => setIsEditing(true)}
+          >
+            <Text style={styles.ownerButtonText}>Editar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.ownerButton, styles.deleteButton]}
+            onPress={handleDeleteModel}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.ownerButtonText}>Eliminar</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isOwner && isEditing && (
+        <View style={styles.editForm}>
+          <TextInput
+            style={styles.editInput}
+            value={editName}
+            onChangeText={setEditName}
+            placeholder="Nombre"
+            placeholderTextColor={COLORS.secondary}
+          />
+          <TextInput
+            style={styles.editInput}
+            value={editCategory}
+            onChangeText={setEditCategory}
+            placeholder="Categoría"
+            placeholderTextColor={COLORS.secondary}
+          />
+          <TextInput
+            style={[styles.editInput, styles.editTextArea]}
+            value={editDescription}
+            onChangeText={setEditDescription}
+            placeholder="Descripción"
+            placeholderTextColor={COLORS.secondary}
+            multiline
+          />
+          <View style={styles.editFormButtons}>
+            <TouchableOpacity
+              style={[styles.ownerButton, styles.cancelButton]}
+              onPress={() => setIsEditing(false)}
+            >
+              <Text style={styles.ownerButtonText}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.ownerButton, styles.editButton]}
+              onPress={handleUpdateModel}
+              disabled={savingEdit}
+            >
+              {savingEdit ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.ownerButtonText}>Guardar cambios</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -386,6 +526,63 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  ownerActions: {
+    position: 'absolute',
+    bottom: 32,
+    flexDirection: 'row',
+    alignSelf: 'center',
+    gap: 12,
+  },
+  ownerButton: {
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  editButton: {
+    backgroundColor: COLORS.primary,
+  },
+  deleteButton: {
+    backgroundColor: COLORS.accent,
+  },
+  cancelButton: {
+    backgroundColor: COLORS.secondary,
+  },
+  ownerButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  editForm: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.contrast,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.primary,
+  },
+  editInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+    color: COLORS.secondary,
+  },
+  editTextArea: {
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  editFormButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
   },
   centered: {
     flex: 1,

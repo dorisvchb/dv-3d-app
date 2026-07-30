@@ -8,6 +8,10 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+  Modal,
 } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useSharedValue } from 'react-native-reanimated';
@@ -213,9 +217,12 @@ export default function ModelViewerScreen({ route, navigation }) {
   const startScale = useSharedValue(1);
 
   // Solo se puede "guardar en el catálogo" un modelo recién elegido por
-  // el usuario desde su teléfono — no el modelo de prueba, y no uno que
-  // ya viene del catálogo (ya está guardado)
-  const isUserModel = Boolean(route?.params?.modelUri) && !route?.params?.fromCatalog;
+  // el usuario desde su teléfono o encontrado en Poly Pizza — no el
+  // modelo de prueba, y no uno que ya viene del catálogo (ya está guardado)
+  const isPolyPizzaModel = Boolean(route?.params?.fromPolyPizza);
+  const isUserModel =
+    Boolean(route?.params?.modelUri) && !route?.params?.fromCatalog && !isPolyPizzaModel;
+  const canSave = isUserModel || isPolyPizzaModel;
   const fileName = route?.params?.fileName || 'modelo';
 
   // Solo el dueño del modelo (comparando con el usuario autenticado) puede
@@ -248,33 +255,57 @@ export default function ModelViewerScreen({ route, navigation }) {
   // Captura una miniatura del visor tal como se ve en pantalla, sube el
   // .glb original + esa miniatura a Storage, y crea el documento en
   // Firestore con las URLs resultantes.
+  // Si es un modelo de Poly Pizza, ya está alojado en sus servidores —
+  // solo creamos el documento en Firestore apuntando a esas URLs, sin
+  // subir nada nuestro. Si es un modelo elegido por el usuario, capturamos
+  // una miniatura y subimos ambos archivos a Cloudinary primero.
   const handleSaveToCatalog = async () => {
     setSaving(true);
     try {
-      const snapshotUri = await viewShotRef.current.capture();
+      if (isPolyPizzaModel) {
+        const { thumbnailUrl, attribution, externalId, category } =
+          route.params.polyPizzaData;
 
-      const baseName = fileName.replace(/\.(glb|gltf)$/i, '');
-      const { modelUrl, thumbnailUrl } = await uploadModelWithThumbnail({
-        ownerId: user.uid,
-        modelLocalUri: route.params.modelUri,
-        thumbnailLocalUri: snapshotUri,
-        fileBaseName: baseName,
-      });
+        await createModel({
+          name: fileName,
+          description: '',
+          category: category || 'sin categoría',
+          modelUrl: route.params.modelUri,
+          modelType: 'glb',
+          thumbnailUrl,
+          initialScale: 1,
+          initialPosition: { x: 0, y: 0, z: 0 },
+          source: 'polypizza',
+          externalId,
+          attribution,
+          ownerId: user.uid,
+        });
+      } else {
+        const snapshotUri = await viewShotRef.current.capture();
 
-      await createModel({
-        name: baseName,
-        description: '',
-        category: 'sin categoría',
-        modelUrl,
-        modelType: 'glb',
-        thumbnailUrl,
-        initialScale: 1,
-        initialPosition: { x: 0, y: 0, z: 0 },
-        source: 'local',
-        externalId: null,
-        attribution: null,
-        ownerId: user.uid,
-      });
+        const baseName = fileName.replace(/\.(glb|gltf)$/i, '');
+        const { modelUrl, thumbnailUrl } = await uploadModelWithThumbnail({
+          ownerId: user.uid,
+          modelLocalUri: route.params.modelUri,
+          thumbnailLocalUri: snapshotUri,
+          fileBaseName: baseName,
+        });
+
+        await createModel({
+          name: baseName,
+          description: '',
+          category: 'sin categoría',
+          modelUrl,
+          modelType: 'glb',
+          thumbnailUrl,
+          initialScale: 1,
+          initialPosition: { x: 0, y: 0, z: 0 },
+          source: 'local',
+          externalId: null,
+          attribution: null,
+          ownerId: user.uid,
+        });
+      }
 
       Alert.alert('Guardado', 'El modelo se agregó a tu catálogo correctamente.', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -418,7 +449,7 @@ export default function ModelViewerScreen({ route, navigation }) {
         <View style={StyleSheet.absoluteFill} />
       </GestureDetector>
 
-      {isUserModel && (
+      {canSave && (
         <TouchableOpacity
           style={styles.saveButton}
           onPress={handleSaveToCatalog}
@@ -454,51 +485,66 @@ export default function ModelViewerScreen({ route, navigation }) {
         </View>
       )}
 
-      {isOwner && isEditing && (
-        <View style={styles.editForm}>
-          <TextInput
-            style={styles.editInput}
-            value={editName}
-            onChangeText={setEditName}
-            placeholder="Nombre"
-            placeholderTextColor={COLORS.secondary}
-          />
-          <TextInput
-            style={styles.editInput}
-            value={editCategory}
-            onChangeText={setEditCategory}
-            placeholder="Categoría"
-            placeholderTextColor={COLORS.secondary}
-          />
-          <TextInput
-            style={[styles.editInput, styles.editTextArea]}
-            value={editDescription}
-            onChangeText={setEditDescription}
-            placeholder="Descripción"
-            placeholderTextColor={COLORS.secondary}
-            multiline
-          />
-          <View style={styles.editFormButtons}>
-            <TouchableOpacity
-              style={[styles.ownerButton, styles.cancelButton]}
-              onPress={() => setIsEditing(false)}
+      <Modal
+        visible={isOwner && isEditing}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsEditing(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.editFormWrapper}>
+            <ScrollView
+              contentContainerStyle={styles.editForm}
+              keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.ownerButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.ownerButton, styles.editButton]}
-              onPress={handleUpdateModel}
-              disabled={savingEdit}
-            >
-              {savingEdit ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.ownerButtonText}>Guardar cambios</Text>
-              )}
-            </TouchableOpacity>
+              <TextInput
+                style={styles.editInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Nombre"
+                placeholderTextColor={COLORS.secondary}
+              />
+              <TextInput
+                style={styles.editInput}
+                value={editCategory}
+                onChangeText={setEditCategory}
+                placeholder="Categoría"
+                placeholderTextColor={COLORS.secondary}
+              />
+              <TextInput
+                style={[styles.editInput, styles.editTextArea]}
+                value={editDescription}
+                onChangeText={setEditDescription}
+                placeholder="Descripción"
+                placeholderTextColor={COLORS.secondary}
+                multiline
+              />
+              <View style={styles.editFormButtons}>
+                <TouchableOpacity
+                  style={[styles.ownerButton, styles.cancelButton]}
+                  onPress={() => setIsEditing(false)}
+                >
+                  <Text style={styles.ownerButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.ownerButton, styles.editButton]}
+                  onPress={handleUpdateModel}
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.ownerButtonText}>Guardar cambios</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-        </View>
-      )}
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -555,15 +601,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
-  editForm: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  editFormWrapper: {
+    maxHeight: '80%',
     backgroundColor: COLORS.contrast,
-    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     borderTopWidth: 1,
     borderTopColor: COLORS.primary,
+  },
+  editForm: {
+    padding: 16,
   },
   editInput: {
     backgroundColor: '#FFFFFF',

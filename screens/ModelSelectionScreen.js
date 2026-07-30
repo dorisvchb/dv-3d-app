@@ -143,6 +143,13 @@ export default function ModelSelectionScreen({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.polyPizzaButton}
+          onPress={() => navigation.navigate('PolyPizzaSearch')}
+        >
+          <Text style={styles.polyPizzaButtonText}>Buscar en Poly Pizza</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.viewerButton}
           onPress={() => navigation.navigate('ModelViewer')}
         >
@@ -241,6 +248,18 @@ const styles = StyleSheet.create({
   },
   pickButtonText: {
     color: COLORS.secondary,
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  polyPizzaButton: {
+    backgroundColor: COLORS.accent,
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  polyPizzaButtonText: {
+    color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 15,
   },

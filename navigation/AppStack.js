@@ -2,6 +2,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ModelSelectionScreen from '../screens/ModelSelectionScreen';
 import ModelViewerScreen from '../screens/ModelViewerScreen';
+import PolyPizzaSearchScreen from '../screens/PolyPizzaSearchScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -17,6 +18,11 @@ export default function AppStack() {
         name="ModelViewer"
         component={ModelViewerScreen}
         options={{ title: 'Visualizador' }}
+      />
+      <Stack.Screen
+        name="PolyPizzaSearch"
+        component={PolyPizzaSearchScreen}
+        options={{ title: 'Buscar en Poly Pizza' }}
       />
     </Stack.Navigator>
   );

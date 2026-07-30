@@ -53,6 +53,9 @@ Desarrollar una aplicación móvil utilizando Expo React Native con React Three 
 - **react-native-reanimated** + **react-native-worklets** — Ejecutan la lógica de los gestos en el hilo de UI, evitando lag al actualizar la rotación/escala del modelo en cada frame.
 - **Firebase Authentication** — Servicio de autenticación utilizado para el registro e inicio de sesión de usuarios mediante correo electrónico y contraseña.
 - **Firebase Firestore** — Base de datos donde se almacenan los metadatos de los modelos 3D del catálogo (nombre, descripción, URLs, propietario, etc.).
+- **Cloudinary** — Almacenamiento de archivos (modelos `.glb` y miniaturas). Se usa en vez de Firebase Storage porque este último requiere el plan de pago "Blaze" (exige tarjeta de crédito registrada); Cloudinary ofrece una capa gratuita generosa sin necesidad de tarjeta.
+- **expo-document-picker** — Selector nativo de archivos del sistema, usado para elegir modelos `.glb`/`.gltf` propios desde el teléfono.
+- **react-native-view-shot** — Captura una imagen (miniatura) de lo que se ve en el visor 3D al momento de guardar un modelo en el catálogo.
 - **React Navigation** (`@react-navigation/native-stack`) — Manejo de la navegación entre pantallas, incluyendo la navegación condicional según el estado de sesión del usuario.
 - **AsyncStorage** (`@react-native-async-storage/async-storage`) — Persistencia local de la sesión de Firebase Authentication entre reinicios de la app.
 
@@ -121,6 +124,7 @@ npx expo install react-native-screens react-native-safe-area-context
 npx expo install three @react-three/fiber @react-three/drei
 npx expo install expo-gl expo-asset expo-file-system
 npx expo install react-native-gesture-handler react-native-reanimated react-native-worklets
+npx expo install expo-document-picker react-native-view-shot
 ```
 
 **7. Ejecuta la aplicación**
@@ -284,6 +288,27 @@ service cloud.firestore {
 
 `modelType` y `source` dejan la estructura lista para integrar más adelante modelos de Poly Pizza y archivos `.stl` de Thingiverse sin tener que rediseñar la colección.
 
+## Configuración de Cloudinary (almacenamiento de archivos)
+
+Los archivos `.glb` y las miniaturas de los modelos se alojan en **Cloudinary** en vez de Firebase Storage, porque Firebase Storage requiere el plan de pago "Blaze" (pide una tarjeta de crédito registrada, aunque no cobre dentro de la capa gratuita). Cloudinary ofrece 25GB de almacenamiento y transferencia mensual gratis, sin tarjeta.
+
+### 1. Crear cuenta gratuita
+
+Regístrate en [cloudinary.com](https://cloudinary.com) con tu correo. En el **Dashboard**, copia tu **Cloud name**.
+
+### 2. Crear un upload preset sin firma
+
+En **Settings → Upload → Upload presets → Add upload preset**, cambia **Signing Mode** a **Unsigned** y guarda. Esto permite subir archivos desde la app sin exponer credenciales secretas.
+
+### 3. Configurar `services/storage.js`
+
+Reemplaza los valores de ejemplo con los tuyos:
+
+```javascript
+const CLOUD_NAME = 'TU_CLOUD_NAME';
+const UPLOAD_PRESET = 'TU_UPLOAD_PRESET';
+```
+
 ## Estructura del proyecto
 
 ```
@@ -298,7 +323,8 @@ dv-3d-app/
 ├── context/
 │   └── AuthContext.js           # Contexto global de sesión (onAuthStateChanged)
 ├── services/
-│   └── models.js                # CRUD de la colección "models" en Firestore
+│   ├── models.js                # CRUD de la colección "models" en Firestore
+│   └── storage.js               # Subida de archivos (.glb + miniatura) a Cloudinary
 ├── navigation/
 │   ├── AuthStack.js             # Stack de pantallas sin sesión: Login, Register
 │   ├── AppStack.js              # Stack de pantallas con sesión: ModelSelection, ModelViewer
@@ -334,7 +360,15 @@ dv-3d-app/
 - Ambos gestos usan `react-native-reanimated` (`useSharedValue` + `useFrame`) para actualizar la rotación/escala directamente en el hilo de UI en cada frame, evitando el lag de cruzar el puente JS en cada movimiento del dedo.
 - El detector de gestos se coloca en una capa transparente **superpuesta** al `Canvas` (no como su contenedor) para evitar conflictos de captura de toque con la vista nativa del renderer.
 
-> Actualmente el visor carga un modelo fijo de prueba (`aldeana_appExpo.glb`). Al implementar el catálogo (HU-03), recibirá la URL del modelo por parámetro de navegación en lugar de un `require()` fijo.
+> El visor recibe el modelo por parámetro de navegación (`route.params.modelUri`). Sin parámetros, muestra el modelo de prueba empaquetado (`aldeana_appExpo.glb`). Con un modelo elegido por el usuario, se muestra sin textura (limitación conocida — no hay un archivo de textura separado para modelos arbitrarios).
+
+### Selección de modelo local y guardado en el catálogo
+
+- **`expo-document-picker`** permite elegir un archivo `.glb`/`.gltf` desde el almacenamiento del teléfono (la app no tiene acceso directo al sistema de archivos por seguridad; el picker devuelve una URI temporal accesible solo por la app).
+- Desde el visor, con un modelo elegido por el usuario, aparece el botón **"Guardar en mi catálogo"**:
+  1. `react-native-view-shot` captura una miniatura de lo que se ve en el `Canvas` en ese momento.
+  2. `services/storage.js` sube el `.glb` original y esa miniatura a Cloudinary.
+  3. `services/models.js` crea el documento correspondiente en Firestore con las URLs resultantes.
 
 ## Estado actual del proyecto
 
@@ -348,8 +382,10 @@ dv-3d-app/
 - [x] Implementación de rotación táctil (HU-05)
 - [x] Implementación de zoom táctil (HU-06)
 - [x] Definición del esquema de Firestore para el catálogo de modelos
-- [ ] CRUD completo de modelos (Storage + Firestore)
-- [ ] Selección de modelo `.glb` propio desde el teléfono
+- [x] Selección de modelo `.glb` propio desde el teléfono (`expo-document-picker`)
+- [x] Guardado de modelos en Firestore + Cloudinary (crear: modelo + miniatura + metadatos)
+- [ ] Catálogo de modelos 3D — listado con miniaturas (HU-03)
+- [ ] Actualizar/eliminar modelos guardados (UPDATE/DELETE del CRUD)
 - [ ] Integración con Poly Pizza API
 - [ ] Estructura preparada para integración futura con Thingiverse (`.stl`)
 

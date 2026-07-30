@@ -362,6 +362,15 @@ dv-3d-app/
 
 > El visor recibe el modelo por parámetro de navegación (`route.params.modelUri`). Sin parámetros, muestra el modelo de prueba empaquetado (`aldeana_appExpo.glb`). Con un modelo elegido por el usuario, se muestra sin textura (limitación conocida — no hay un archivo de textura separado para modelos arbitrarios).
 
+### Catálogo de modelos (HU-03)
+
+`ModelSelectionScreen` ahora es un catálogo real en vez de un placeholder:
+
+- Consulta `getAllModels()` de Firestore y muestra una cuadrícula (`FlatList`, 2 columnas) con la miniatura y el nombre de cada modelo guardado.
+- `useFocusEffect` recarga la lista automáticamente cada vez que la pantalla vuelve a tener foco — por ejemplo, al regresar del visor después de guardar un modelo nuevo.
+- Tocar una tarjeta abre el visor con `fromCatalog: true`, lo que oculta el botón "Guardar en mi catálogo" (el modelo ya está guardado).
+- Se mantienen los accesos a "Seleccionar modelo desde mi teléfono" y "Ver modelo de prueba" como pie de página.
+
 ### Selección de modelo local y guardado en el catálogo
 
 - **`expo-document-picker`** permite elegir un archivo `.glb`/`.gltf` desde el almacenamiento del teléfono (la app no tiene acceso directo al sistema de archivos por seguridad; el picker devuelve una URI temporal accesible solo por la app).
@@ -384,7 +393,7 @@ dv-3d-app/
 - [x] Definición del esquema de Firestore para el catálogo de modelos
 - [x] Selección de modelo `.glb` propio desde el teléfono (`expo-document-picker`)
 - [x] Guardado de modelos en Firestore + Cloudinary (crear: modelo + miniatura + metadatos)
-- [ ] Catálogo de modelos 3D — listado con miniaturas (HU-03)
+- [x] Catálogo de modelos 3D — listado con miniaturas (HU-03)
 - [ ] Actualizar/eliminar modelos guardados (UPDATE/DELETE del CRUD)
 - [ ] Integración con Poly Pizza API
 - [ ] Estructura preparada para integración futura con Thingiverse (`.stl`)

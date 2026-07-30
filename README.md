@@ -14,6 +14,7 @@ Aplicación móvil para visualización interactiva de objetos 3D, desarrollada c
 - [Tecnología usada](#tecnología-usada)
 - [Instrucciones de instalación](#instrucciones-de-instalación)
 - [Configuración de Firebase Authentication](#configuración-de-firebase-authentication)
+- [Configuración de Firestore](#configuración-de-firestore)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Estado actual del proyecto](#estado-actual-del-proyecto)
 
@@ -44,8 +45,14 @@ Desarrollar una aplicación móvil utilizando Expo React Native con React Three 
 
 - **[Expo](https://expo.dev/)** — Framework para desarrollar aplicaciones multiplataforma con React Native.
 - **React Native** — Biblioteca para construir interfaces nativas usando JavaScript/React.
-- **React Three Fiber** — Renderer de Three.js para React, utilizado para la visualización e interacción con los modelos 3D.
+- **React Three Fiber** (`@react-three/fiber`) — Renderer declarativo de Three.js para React, utilizado para la visualización e interacción con los modelos 3D.
+- **Three.js** (`three`) — Motor 3D base sobre el que funciona React Three Fiber.
+- **expo-gl** — Contexto WebGL nativo requerido por React Three Fiber para renderizar en un `<Canvas>` dentro de Expo.
+- **expo-asset** — Carga de archivos locales empaquetados con la app (modelos `.glb`, texturas) como assets accesibles por URI.
+- **react-native-gesture-handler** — Detección de gestos táctiles (arrastrar para rotar, pellizco para zoom) sobre el visor 3D.
+- **react-native-reanimated** + **react-native-worklets** — Ejecutan la lógica de los gestos en el hilo de UI, evitando lag al actualizar la rotación/escala del modelo en cada frame.
 - **Firebase Authentication** — Servicio de autenticación utilizado para el registro e inicio de sesión de usuarios mediante correo electrónico y contraseña.
+- **Firebase Firestore** — Base de datos donde se almacenan los metadatos de los modelos 3D del catálogo (nombre, descripción, URLs, propietario, etc.).
 - **React Navigation** (`@react-navigation/native-stack`) — Manejo de la navegación entre pantallas, incluyendo la navegación condicional según el estado de sesión del usuario.
 - **AsyncStorage** (`@react-native-async-storage/async-storage`) — Persistencia local de la sesión de Firebase Authentication entre reinicios de la app.
 
@@ -111,6 +118,9 @@ Con el proyecto ya creado, instala las librerías necesarias para autenticación
 npx expo install firebase @react-native-async-storage/async-storage
 npx expo install @react-navigation/native @react-navigation/native-stack
 npx expo install react-native-screens react-native-safe-area-context
+npx expo install three @react-three/fiber @react-three/drei
+npx expo install expo-gl expo-asset expo-file-system
+npx expo install react-native-gesture-handler react-native-reanimated react-native-worklets
 ```
 
 **7. Ejecuta la aplicación**
@@ -151,10 +161,7 @@ d) **Importante:** existe la opción de conexión por **túnel** o **LAN** (por 
 2. Toca **"Scan QR code"**
 3. Escanea el código QR que aparece en la terminal
 
-En pocos segundos verás tu app corriendo en tu teléfono.
-![App funcionando](./assets/docs/images/appFuncionando.png)
-
-Con la autenticación ya implementada, verás la pantalla de **Login** como parte de las nuevas funcionalidades implementadas.
+En pocos segundos verás tu app corriendo en tu teléfono. Con la autenticación ya implementada, verás la pantalla de **Login** como parte de las nuevas funcionalidades implementadas.
 ![Pantalla de login](./assets/docs/images/pantallaLogin.png)
 
 **9. Para detener el servidor de desarrollo**, presiona `Ctrl + C` en la línea de comandos.
@@ -217,25 +224,94 @@ Sin este paso, las funciones de registro e inicio de sesión fallarán con el er
 
 En **Authentication → Users** puedes ver, inspeccionar o eliminar manualmente las cuentas creadas durante las pruebas de la app.
 
+## Configuración de Firestore
+
+La app usa **Firestore** para almacenar los metadatos del catálogo de modelos 3D (nombre, descripción, URLs del modelo/miniatura, propietario, etc.) — el archivo `.glb` en sí y su imagen de miniatura se alojarán en Firebase Storage (pendiente de implementar).
+
+### 1. Crear la base de datos
+
+1. En la consola de Firebase: **Firestore Database → Crear base de datos**.
+2. Selecciona **Modo de producción** (no "modo de prueba" — se configuran reglas específicas en el siguiente paso).
+3. Elige la ubicación del servidor más cercana a tus usuarios (no se puede cambiar después de creada).
+
+### 2. Configurar Security Rules
+
+En **Firestore Database → Rules**:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /models/{modelId} {
+      // Cualquier usuario autenticado puede leer el catálogo
+      allow read: if request.auth != null;
+
+      // Solo el dueño puede crear/editar/eliminar sus propios modelos
+      allow create: if request.auth != null
+                    && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if request.auth != null
+                    && resource.data.ownerId == request.auth.uid;
+    }
+  }
+}
+```
+
+### 3. Esquema de la colección `models`
+
+```javascript
+{
+  id: "auto-generado por Firestore",
+  name: "Aldeana",
+  description: "Personaje de aldea, estilo low-poly",
+  category: "personajes",
+
+  modelUrl: "https://firebasestorage.../aldeana_appExpo.glb",
+  modelType: "glb",                     // "glb" | "gltf" | "stl" (para Thingiverse a futuro)
+  thumbnailUrl: "https://firebasestorage.../aldeana_thumb.png",
+
+  initialScale: 1,
+  initialPosition: { x: 0, y: 0, z: 0 },
+
+  source: "local",                      // "local" | "polypizza" | "thingiverse"
+  externalId: null,
+  attribution: null,
+
+  ownerId: "uid-del-usuario-de-firebase-auth",
+  createdAt: "<Firestore Timestamp>",
+  updatedAt: "<Firestore Timestamp>",
+}
+```
+
+`modelType` y `source` dejan la estructura lista para integrar más adelante modelos de Poly Pizza y archivos `.stl` de Thingiverse sin tener que rediseñar la colección.
+
 ## Estructura del proyecto
 
 ```
 dv-3d-app/
-├── App.js                       # Punto de entrada: envuelve la app con AuthProvider y RootNavigator
-├── firebaseConfig.js            # Configuración e inicialización de Firebase Authentication
+├── App.js                       # Punto de entrada: polyfills, GestureHandlerRootView, AuthProvider, RootNavigator
+├── polyfills.js                 # Shims (atob/btoa/TextEncoder) requeridos por Hermes para decodificar datos binarios
+├── firebaseConfig.js            # Configuración e inicialización de Firebase (Auth + Firestore)
+├── metro.config.js              # Config de Metro: reconoce .glb/.gltf como assets
+├── babel.config.js              # Preset de Expo + plugin de react-native-reanimated
 ├── theme.js                     # Paleta de colores y estilos compartidos
 ├── validation.js                # Funciones de validación de formularios (correo, contraseña, nombre)
 ├── context/
 │   └── AuthContext.js           # Contexto global de sesión (onAuthStateChanged)
+├── services/
+│   └── models.js                # CRUD de la colección "models" en Firestore
 ├── navigation/
 │   ├── AuthStack.js             # Stack de pantallas sin sesión: Login, Register
 │   ├── AppStack.js              # Stack de pantallas con sesión: ModelSelection, ModelViewer
 │   └── RootNavigator.js         # Decide qué stack mostrar según el estado de sesión
-└── screens/
-    ├── LoginScreen.js           # Formulario de inicio de sesión
-    ├── RegisterScreen.js        # Formulario de registro
-    ├── ModelSelectionScreen.js  # Pantalla principal (placeholder, pendiente HU-03)
-    └── ModelViewerScreen.js     # Visualizador de modelos 3D (placeholder, pendiente HU-04, HU-05, HU-06)
+├── screens/
+│   ├── LoginScreen.js           # Formulario de inicio de sesión
+│   ├── RegisterScreen.js        # Formulario de registro
+│   ├── ModelSelectionScreen.js  # Pantalla principal (placeholder, pendiente catálogo HU-03)
+│   └── ModelViewerScreen.js     # Visor 3D: carga .glb, textura, rotación y zoom táctil
+└── assets/
+    └── models/
+        ├── aldeana_appExpo.glb  # Modelo de prueba
+        └── aldeana_textura.png  # Textura del modelo de prueba
 ```
 
 ### Flujo de autenticación
@@ -247,6 +323,19 @@ dv-3d-app/
 5. El registro de un nuevo usuario cierra la sesión automáticamente después de crear la cuenta (`signOut`), para que el usuario inicie sesión manualmente en vez de quedar autenticado sin confirmarlo.
 6. La navegación entre `AuthStack` y `AppStack` es automática: no se hace con `navigation.navigate`, sino que reacciona al cambio de estado de sesión detectado por `onAuthStateChanged`.
 
+### Visor 3D
+
+`ModelViewerScreen` carga y muestra un modelo `.glb` con textura e interacción táctil completa:
+
+- **Carga del modelo**: se descarga el `.glb` con `expo-asset`, se leen sus bytes y se eliminan las referencias a texturas embebidas antes de parsearlo con `GLTFLoader` — esto evita que la librería intente decodificar imágenes en base64 (algo que no funciona en React Native) y acelera la carga considerablemente.
+- **Textura**: se aplica manualmente creando una `THREE.Texture` a partir del asset de la imagen, ajustando `flipY` y `colorSpace` según la convención de UV de glTF.
+- **Rotación táctil**: horizontal libre (eje Y) y vertical limitada a ±45° (eje X), mediante `Gesture.Pan` de `react-native-gesture-handler`.
+- **Zoom táctil**: `Gesture.Pinch`, escala el modelo entre 0.5x y 3x.
+- Ambos gestos usan `react-native-reanimated` (`useSharedValue` + `useFrame`) para actualizar la rotación/escala directamente en el hilo de UI en cada frame, evitando el lag de cruzar el puente JS en cada movimiento del dedo.
+- El detector de gestos se coloca en una capa transparente **superpuesta** al `Canvas` (no como su contenedor) para evitar conflictos de captura de toque con la vista nativa del renderer.
+
+> Actualmente el visor carga un modelo fijo de prueba (`aldeana_appExpo.glb`). Al implementar el catálogo (HU-03), recibirá la URL del modelo por parámetro de navegación en lugar de un `require()` fijo.
+
 ## Estado actual del proyecto
 
 - [x] Definición del problema, objetivo y alcance del MVP
@@ -255,9 +344,14 @@ dv-3d-app/
 - [x] Implementación de registro de usuarios (HU-01)
 - [x] Implementación de inicio de sesión (HU-02)
 - [ ] Implementación del catálogo de modelos 3D (HU-03)
-- [ ] Implementación de la visualización de modelos 3D con React Three Fiber (HU-04)
-- [ ] Implementación de rotación táctil (HU-05)
-- [ ] Implementación de zoom táctil (HU-06)
+- [x] Implementación de la visualización de modelos 3D con React Three Fiber (HU-04)
+- [x] Implementación de rotación táctil (HU-05)
+- [x] Implementación de zoom táctil (HU-06)
+- [x] Definición del esquema de Firestore para el catálogo de modelos
+- [ ] CRUD completo de modelos (Storage + Firestore)
+- [ ] Selección de modelo `.glb` propio desde el teléfono
+- [ ] Integración con Poly Pizza API
+- [ ] Estructura preparada para integración futura con Thingiverse (`.stl`)
 
 ---
 

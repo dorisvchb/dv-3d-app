@@ -1,12 +1,16 @@
 // screens/ModelViewerScreen.js
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Alert } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useSharedValue } from 'react-native-reanimated';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import * as THREE from 'three';
 import { Asset } from 'expo-asset';
+import ViewShot from 'react-native-view-shot';
+import { useAuth } from '../context/AuthContext';
+import { uploadModelWithThumbnail } from '../services/storage';
+import { createModel } from '../services/models';
 import { COLORS } from '../theme';
 
 // El .glb trae texturas embebidas en base64 que GLTFLoader no puede
@@ -69,16 +73,26 @@ function stripEmbeddedImages(arrayBuffer) {
   return newBuffer;
 }
 
-function useLocalTexture(assetModule) {
+function useLocalTexture(source) {
   const [texture, setTexture] = useState(null);
 
   useEffect(() => {
+    if (!source) {
+      setTexture(null);
+      return;
+    }
     let isMounted = true;
     (async () => {
-      const asset = Asset.fromModule(assetModule);
-      await asset.downloadAsync();
+      // Si es una URI directa (string), THREE.Texture puede usarla igual
+      // que un Asset — expo-gl decodifica ambos casos al subir a la GPU
+      let image = source;
+      if (typeof source !== 'string') {
+        const asset = Asset.fromModule(source);
+        await asset.downloadAsync();
+        image = asset;
+      }
       const tex = new THREE.Texture();
-      tex.image = asset;
+      tex.image = image;
       // Los mapas UV de modelos glTF/.glb usan la convención contraria a la
       // de imágenes web normales — sin este ajuste, las coordenadas UV caen
       // en la posición vertical equivocada de la imagen (por eso las zonas
@@ -91,14 +105,23 @@ function useLocalTexture(assetModule) {
     return () => {
       isMounted = false;
     };
-  }, [assetModule]);
+  }, [source]);
 
   return texture;
 }
 
-// Carga el .glb manualmente: descarga -> lee como ArrayBuffer -> quita
-// texturas embebidas -> parsea con GLTFLoader
-function useCleanGLTF(assetModule) {
+// Resuelve tanto un require() de asset empaquetado como una URI directa
+// (por ejemplo, un archivo elegido por el usuario con expo-document-picker)
+async function resolveUri(source) {
+  if (typeof source === 'string') return source;
+  const asset = Asset.fromModule(source);
+  await asset.downloadAsync();
+  return asset.localUri || asset.uri;
+}
+
+// Carga el .glb manualmente: resuelve la URI -> lee como ArrayBuffer ->
+// quita texturas embebidas -> parsea con GLTFLoader
+function useCleanGLTF(source) {
   const [gltf, setGltf] = useState(null);
   const [error, setError] = useState(null);
 
@@ -106,9 +129,7 @@ function useCleanGLTF(assetModule) {
     let isMounted = true;
     (async () => {
       try {
-        const asset = Asset.fromModule(assetModule);
-        await asset.downloadAsync();
-        const uri = asset.localUri || asset.uri;
+        const uri = await resolveUri(source);
 
         const response = await fetch(uri);
         const arrayBuffer = await response.arrayBuffer();
@@ -135,7 +156,7 @@ function useCleanGLTF(assetModule) {
     return () => {
       isMounted = false;
     };
-  }, [assetModule]);
+  }, [source]);
 
   return { gltf, error };
 }
@@ -171,8 +192,11 @@ function Model({ gltf, texture, groupRef, rotationY, rotationX, scale }) {
   return <primitive ref={groupRef} object={gltf.scene} />;
 }
 
-export default function ModelViewerScreen() {
+export default function ModelViewerScreen({ route }) {
   const groupRef = useRef(null);
+  const viewShotRef = useRef(null);
+  const { user } = useAuth();
+  const [saving, setSaving] = useState(false);
   const rotationY = useSharedValue(0);
   const startRotationY = useSharedValue(0);
   const rotationX = useSharedValue(0);
@@ -180,8 +204,65 @@ export default function ModelViewerScreen() {
   const scale = useSharedValue(1);
   const startScale = useSharedValue(1);
 
-  const { gltf, error } = useCleanGLTF(require('../assets/models/aldeana_appExpo.glb'));
-  const texture = useLocalTexture(require('../assets/models/aldeana_textura.png'));
+  // Solo se puede "guardar en el catálogo" un modelo elegido por el
+  // usuario (no el modelo de prueba empaquetado con la app)
+  const isUserModel = Boolean(route?.params?.modelUri);
+  const fileName = route?.params?.fileName || 'modelo';
+
+  // Si se navega con parámetros (ej. desde el selector de archivos o, más
+  // adelante, desde el catálogo), se usa ese modelo. Si no, se muestra el
+  // modelo de prueba empaquetado con la app.
+  const modelSource = route?.params?.modelUri
+    ? route.params.modelUri
+    : require('../assets/models/aldeana_appExpo.glb');
+  const textureSource = route?.params?.textureUri
+    ? route.params.textureUri
+    : route?.params?.modelUri
+      ? null // modelo elegido por el usuario sin textura provista: se muestra sin textura
+      : require('../assets/models/aldeana_textura.png');
+
+  const { gltf, error } = useCleanGLTF(modelSource);
+  const texture = useLocalTexture(textureSource);
+
+  // Captura una miniatura del visor tal como se ve en pantalla, sube el
+  // .glb original + esa miniatura a Storage, y crea el documento en
+  // Firestore con las URLs resultantes.
+  const handleSaveToCatalog = async () => {
+    setSaving(true);
+    try {
+      const snapshotUri = await viewShotRef.current.capture();
+
+      const baseName = fileName.replace(/\.(glb|gltf)$/i, '');
+      const { modelUrl, thumbnailUrl } = await uploadModelWithThumbnail({
+        ownerId: user.uid,
+        modelLocalUri: route.params.modelUri,
+        thumbnailLocalUri: snapshotUri,
+        fileBaseName: baseName,
+      });
+
+      await createModel({
+        name: baseName,
+        description: '',
+        category: 'sin categoría',
+        modelUrl,
+        modelType: 'glb',
+        thumbnailUrl,
+        initialScale: 1,
+        initialPosition: { x: 0, y: 0, z: 0 },
+        source: 'local',
+        externalId: null,
+        attribution: null,
+        ownerId: user.uid,
+      });
+
+      Alert.alert('Guardado', 'El modelo se agregó a tu catálogo correctamente.');
+    } catch (e) {
+      console.error('[ModelViewer] Error guardando en el catálogo:', e);
+      Alert.alert('Error', 'No se pudo guardar el modelo. Intenta de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Límite de inclinación vertical: ±45° (en radianes), para permitir ver
   // el modelo un poco desde arriba/abajo sin llegar a voltearlo por completo
@@ -235,26 +316,46 @@ export default function ModelViewerScreen() {
 
   return (
     <View style={styles.container}>
-      <Canvas camera={{ position: [0, 0, 3] }}>
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[3, 3, 3]} intensity={1} />
-        <Suspense fallback={null}>
-          <Model
-            gltf={gltf}
-            texture={texture}
-            groupRef={groupRef}
-            rotationY={rotationY}
-            rotationX={rotationX}
-            scale={scale}
-          />
-        </Suspense>
-      </Canvas>
+      <ViewShot
+        ref={viewShotRef}
+        options={{ format: 'png', quality: 0.8 }}
+        style={styles.viewShot}
+      >
+        <Canvas camera={{ position: [0, 0, 3] }}>
+          <ambientLight intensity={0.8} />
+          <directionalLight position={[3, 3, 3]} intensity={1} />
+          <Suspense fallback={null}>
+            <Model
+              gltf={gltf}
+              texture={texture}
+              groupRef={groupRef}
+              rotationY={rotationY}
+              rotationX={rotationX}
+              scale={scale}
+            />
+          </Suspense>
+        </Canvas>
+      </ViewShot>
       {/* Capa transparente encima del Canvas que captura el toque
           directamente, evitando que el GLView del renderer compita por
           el gesto (causa probable de la detección intermitente) */}
       <GestureDetector gesture={combinedGesture}>
         <View style={StyleSheet.absoluteFill} />
       </GestureDetector>
+
+      {isUserModel && (
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={handleSaveToCatalog}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.saveButtonText}>Guardar en mi catálogo</Text>
+          )}
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -263,6 +364,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.contrast,
+  },
+  viewShot: {
+    flex: 1,
+  },
+  saveButton: {
+    position: 'absolute',
+    bottom: 32,
+    alignSelf: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    minWidth: 220,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: COLORS.secondary,
+    fontWeight: 'bold',
+    fontSize: 15,
   },
   centered: {
     flex: 1,

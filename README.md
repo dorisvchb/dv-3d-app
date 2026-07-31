@@ -390,6 +390,14 @@ Al abrir un modelo desde el catálogo, si el usuario autenticado es el dueño (`
 
 La comprobación de `ownerId` en la app es solo para la experiencia de usuario (ocultar botones que no aplican); la seguridad real la garantizan las Security Rules de Firestore, que rechazan cualquier intento de editar/eliminar un documento que no pertenezca al usuario autenticado, sin importar lo que haga la interfaz.
 
+> **Verificado con dos cuentas distintas**: al iniciar sesión con un segundo usuario, el catálogo muestra los modelos de todos los usuarios (como está pensado, según HU-03), pero los botones de Editar/Eliminar solo aparecen en los modelos propios — confirmando que tanto la UI como las Security Rules funcionan correctamente.
+
+### Fix: navegación duplicaba estado entre modelos distintos
+
+Al usar `navigation.navigate('ModelViewer', ...)` hacia una pantalla ya presente en el stack, React Navigation reutiliza esa misma instancia y **fusiona** los nuevos parámetros con los anteriores en vez de reemplazarlos. Esto causaba que, al ver un modelo propio del catálogo y luego abrir el modelo de prueba o uno de Poly Pizza, quedaran parámetros residuales (`fromCatalog`, `ownerId`, `modelId`) de la navegación anterior — abriendo el modal de edición automáticamente y fallando al guardar.
+
+**Solución**: se cambiaron todas las navegaciones hacia `ModelViewer` de `navigation.navigate(...)` a `navigation.push(...)`, que siempre crea una instancia nueva de la pantalla sin reutilizar ni fusionar parámetros previos. Como salvaguarda adicional, `isOwner` ahora también exige que `modelId` esté presente.
+
 ### Integración con Poly Pizza (fuente externa de modelos)
 
 Además de subir modelos propios, la app permite buscar e importar modelos gratuitos de [Poly Pizza](https://poly.pizza) (licencias CC0/CC-BY):

@@ -226,8 +226,13 @@ export default function ModelViewerScreen({ route, navigation }) {
   const fileName = route?.params?.fileName || 'modelo';
 
   // Solo el dueño del modelo (comparando con el usuario autenticado) puede
-  // editar o eliminar — coincide con lo que ya exigen las Security Rules
-  const isOwner = route?.params?.fromCatalog && route?.params?.ownerId === user?.uid;
+  // editar o eliminar — coincide con lo que ya exigen las Security Rules.
+  // Se exige también que modelId esté presente como salvaguarda adicional.
+  const isOwner = Boolean(
+    route?.params?.fromCatalog &&
+      route?.params?.modelId &&
+      route?.params?.ownerId === user?.uid
+  );
   const modelId = route?.params?.modelId;
 
   const [isEditing, setIsEditing] = useState(false);

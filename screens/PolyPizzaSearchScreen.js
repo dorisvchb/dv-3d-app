@@ -36,7 +36,7 @@ export default function PolyPizzaSearchScreen({ navigation }) {
   };
 
   const handleSelectModel = (item) => {
-    navigation.navigate('ModelViewer', {
+    navigation.push('ModelViewer', {
       modelUri: item.modelUrl,
       fileName: item.name,
       fromPolyPizza: true,

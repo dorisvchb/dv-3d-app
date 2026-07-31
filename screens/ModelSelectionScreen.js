@@ -72,7 +72,7 @@ export default function ModelSelectionScreen({ navigation }) {
         return;
       }
 
-      navigation.navigate('ModelViewer', { modelUri: file.uri, fileName: file.name });
+      navigation.push('ModelViewer', { modelUri: file.uri, fileName: file.name });
     } catch (e) {
       console.error('[DocumentPicker] Error:', e);
       Alert.alert('Error', 'No se pudo seleccionar el archivo.');
@@ -80,7 +80,7 @@ export default function ModelSelectionScreen({ navigation }) {
   };
 
   const handleOpenCatalogModel = (item) => {
-    navigation.navigate('ModelViewer', {
+    navigation.push('ModelViewer', {
       modelUri: item.modelUrl,
       fileName: item.name,
       fromCatalog: true, // ya está guardado: no mostrar botón de "Guardar en mi catálogo"
@@ -151,7 +151,7 @@ export default function ModelSelectionScreen({ navigation }) {
 
         <TouchableOpacity
           style={styles.viewerButton}
-          onPress={() => navigation.navigate('ModelViewer')}
+          onPress={() => navigation.push('ModelViewer')}
         >
           <Text style={styles.viewerButtonText}>Ver modelo de prueba</Text>
         </TouchableOpacity>
